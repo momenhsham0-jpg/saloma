@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>منصة المهام الرقمية - Task Rewards Portal</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fff1f2',
+              500: '#f43f5e',
+              600: '#e11d48',
+              700: '#be123c',
+              gold: '#f59e0b',
+              dark: '#0f172a',
+              card: '#1e293b'
+            }
+          },
+          fontFamily: {
+            cairo: ['Cairo', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts: Cairo -->
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- React & ReactDOM CDN -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel CDN for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+      background-color: #0b0f19;
+      color: #f8fafc;
+      user-select: none;
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    /* Shimmer & Glow Effects */
+    .gold-glow {
+      box-shadow: 0 0 20px rgba(245, 158, 11, 0.25);
+    }
+    .red-glow {
+      box-shadow: 0 0 25px rgba(244, 63, 94, 0.3);
+    }
+    .card-gradient {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    }
+    .gold-gradient {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+    .vip-badge {
+      background: linear-gradient(90deg, #f59e0b, #fbbf24);
+      color: #000;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body class="bg-[#0b0f19] text-gray-100 min-h-screen pb-20 md:pb-0">
+
+  <div id="root"></div>
+
+  <!-- Firebase Scripts (Modular Version 11) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, collection, addDoc, query, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // App ID & Firebase Config setup
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'task-rewards-app-2026';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' 
+      ? JSON.parse(__firebase_config) 
+      : {
+          apiKey: "demo-key",
+          authDomain: "demo-app.firebaseapp.com",
+          projectId: "demo-app",
+          storageBucket: "demo-app.appspot.com",
+          messagingSenderId: "123456789",
+          appId: "1:123456789:web:abcdef"
+        };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    // Expose variables globally for Babel React scripts
+    window.db = db;
+    window.auth = auth;
+    window.appId = appId;
+    window.signInAnonymously = signInAnonymously;
+    window.signInWithCustomToken = signInWithCustomToken;
+    window.signOutUser = signOut;
+    window.doc = doc;
+    window.setDoc = setDoc;
+    window.getDoc = getDoc;
+    window.updateDoc = updateDoc;
+    window.onSnapshot = onSnapshot;
+    window.collection = collection;
+    window.addDoc = addDoc;
+    window.query = query;
+    window.getDocs = getDocs;
+  </script>
+
+  <!-- React Application Babel Code -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // Constants
+    const ADMIN_PHONE = "01115081946";
+    const DEPOSIT_NUMBERS = ["01299933174", "01114057704"];
+
+    // Main App Component
+    function App() {
+      const [userPhone, setUserPhone] = useState("");
+      const [userData, setUserData] = useState(null);
+      const [activeTab, setActiveTab] = useState("home"); // home, tasks, deposit, withdraw, profile, support, admin
+      const [isLoading, setIsLoading] = useState(true);
+      const [toastMsg, setToastMsg] = useState("");
+
+      // Helper function to show notifications
+      const showToast = (msg) => {
+        setToastMsg(msg);
+        setTimeout(() => setToastMsg(""), 3500);
+      };
+
+      // Authenticate with Firebase on Start
+      useEffect(() => {
+        const initAuth = async () => {
+          try {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+              await window.signInWithCustomToken(window.auth, __initial_auth_token);
+            } else {
+              await window.signInAnonymously(window.auth);
+            }
+          } catch (err) {
+            console.error("Auth Error:", err);
+          } finally {
+            setIsLoading(false);
+          }
+        };
+        initAuth();
+      }, []);
+
+      // Check Saved Phone Session in SessionStorage
+      useEffect(() => {
+        const savedPhone = sessionStorage.getItem("logged_phone");
+        if (savedPhone) {
+          handleLogin(savedPhone, false);
+        }
+      }, []);
+
+      // Listen to User Changes in Firestore
+      useEffect(() => {
+        if (!userPhone) return;
+
+        // Path for Users: /artifacts/{appId}/public/data/users/{phone}
+        const userDocRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', userPhone);
+        
+        const unsubscribe = window.onSnapshot(userDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            setUserData(docSnap.data());
+          }
+        }, (error) => {
+          console.error("Firestore Listener Error:", error);
+        });
+
+        return () => unsubscribe();
+      }, [userPhone]);
+
+      // Login Logic
+      const handleLogin = async (phoneNum, isNewSubmission = true) => {
+        const cleaned = phoneNum.trim();
+        if (!cleaned || cleaned.length < 10) {
+          showToast("يرجى إدخال رقم هاتف صحيح");
+          return;
+        }
+
+        setIsLoading(true);
+        try {
+          setUserPhone(cleaned);
+          sessionStorage.setItem("logged_phone", cleaned);
+
+          if (cleaned === ADMIN_PHONE) {
+            setActiveTab("admin");
+            showToast("تم تسجيل الدخول كـ مطور/مشرف بنجاح");
+            setIsLoading(false);
+            return;
+          }
+
+          // Fetch or Create normal user in Firestore
+          const userDocRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', cleaned);
+          const docSnap = await window.getDoc(userDocRef);
+
+          if (!docSnap.exists()) {
+            // New User Initialization (VIP 0, 0 Balance, 5 Gift Tasks)
+            const newUserData = {
+              phone: cleaned,
+              balance: 0,
+              vipLevel: 0,
+              tasksLeft: 5,
+              tasksCompleted: 0,
+              totalEarned: 0,
+              createdAt: new Date().toISOString(),
+              customVipMinWin: 10,
+              customVipMaxWin: 15,
+            };
+            await window.setDoc(userDocRef, newUserData);
+            setUserData(newUserData);
+            if (isNewSubmission) showToast("أهلاً بك! تم إضافة 5 مهام هدية للمستخدم الجديد 🎉");
+          } else {
+            setUserData(docSnap.data());
+            if (isNewSubmission) showToast("تم تسجيل الدخول بنجاح");
+          }
+          setActiveTab("home");
+        } catch (error) {
+          console.error("Login Exception:", error);
+          showToast("حدث خطأ أثناء تسجيل الدخول، يرجى المحاولة لاحقاً");
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      // Logout Function
+      const handleLogout = () => {
+        sessionStorage.removeItem("logged_phone");
+        setUserPhone("");
+        setUserData(null);
+        setActiveTab("home");
+        showToast("تم تسجيل الخروج بنجاح");
+      };
+
+      if (isLoading) {
+        return (
+          <div className="flex flex-col items-center justify-center min-h-screen bg-[#0b0f19]">
+            <div className="w-16 h-16 border-4 border-rose-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="mt-4 text-gray-400 font-semibold animate-pulse">جاري التحميل وتشفير البيانات...</p>
+          </div>
+        );
+      }
+
+      // If user not logged in, render Login View
+      if (!userPhone) {
+        return <LoginScreen onLogin={(p) => handleLogin(p, true)} toastMsg={toastMsg} showToast={showToast} />;
+      }
+
+      return (
+        <div className="min-h-screen bg-[#0b0f19] text-gray-100 flex flex-col justify-between max-w-md mx-auto relative shadow-2xl border-x border-slate-800">
+          
+          {/* Top Navbar */}
+          <header className="bg-slate-900/80 backdrop-blur-md sticky top-0 z-30 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
+            <div className="flex items-center space-x-2 space-x-reverse">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-rose-600 to-amber-500 flex items-center justify-center font-bold text-white shadow-lg">
+                <i className="fa-solid font-bold text-sm fa-tasks"></i>
+              </div>
+              <div>
+                <h1 className="font-bold text-sm tracking-wide text-white">منصة المهام الرقمية</h1>
+                <p className="text-[10px] text-emerald-400 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> متصل بالسحابة المشفرة
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {userPhone === ADMIN_PHONE ? (
+                <span className="bg-rose-500/20 text-rose-400 text-xs px-2.5 py-1 rounded-full border border-rose-500/30 font-bold">
+                  <i className="fa-solid fa-user-shield ml-1"></i> المطور
+                </span>
+              ) : (
+                <span className="vip-badge text-xs px-2.5 py-0.5 rounded-full text-black font-extrabold shadow">
+                  VIP {userData?.vipLevel ?? 0}
+                </span>
+              )}
+              <button 
+                onClick={handleLogout} 
+                className="bg-slate-800 hover:bg-slate-700 text-gray-300 p-2 rounded-lg text-xs transition border border-slate-700"
+                title="تسجيل الخروج"
+              >
+                <i className="fa-solid fa-right-from-bracket"></i>
+              </button>
+            </div>
+          </header>
+
+          {/* Toast Notification Box */}
+          {toastMsg && (
+            <div className="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 bg-rose-600 text-white px-4 py-2 rounded-xl shadow-2xl text-xs font-bold border border-rose-400 flex items-center gap-2 animate-bounce">
+              <i className="fa-solid fa-circle-info"></i> {toastMsg}
+            </div>
+          )}
+
+          {/* Main Body Content based on activeTab */}
+          <main className="flex-1 p-4 pb-24 overflow-y-auto">
+            {userPhone === ADMIN_PHONE ? (
+              <AdminPanel showToast={showToast} onLogout={handleLogout} />
+            ) : (
+              <>
+                {activeTab === "home" && <HomeScreen userData={userData} setActiveTab={setActiveTab} />}
+                {activeTab === "tasks" && <TasksScreen userData={userData} userPhone={userPhone} showToast={showToast} setActiveTab={setActiveTab} />}
+                {activeTab === "deposit" && <DepositScreen userPhone={userPhone} showToast={showToast} />}
+                {activeTab === "withdraw" && <WithdrawScreen userData={userData} userPhone={userPhone} showToast={showToast} setActiveTab={setActiveTab} />}
+                {activeTab === "profile" && <ProfileScreen userData={userData} userPhone={userPhone} onLogout={handleLogout} setActiveTab={setActiveTab} />}
+                {activeTab === "support" && <SupportScreen />}
+              </>
+            )}
+          </main>
+
+          {/* Bottom Navigation Bar (Hidden for Admin) */}
+          {userPhone !== ADMIN_PHONE && (
+            <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 px-3 py-2 z-40 flex justify-around items-center">
+              <NavButton icon="fa-house" label="الرئيسية" active={activeTab === "home"} onClick={() => setActiveTab("home")} />
+              <NavButton icon="fa-list-check" label="المهام" active={activeTab === "tasks"} onClick={() => setActiveTab("tasks")} highlight={userData?.tasksLeft > 0} />
+              <NavButton icon="fa-wallet" label="الإيداع" active={activeTab === "deposit"} onClick={() => setActiveTab("deposit")} />
+              <NavButton icon="fa-hand-holding-dollar" label="السحب" active={activeTab === "withdraw"} onClick={() => setActiveTab("withdraw")} />
+              <NavButton icon="fa-headset" label="الدعم" active={activeTab === "support"} onClick={() => setActiveTab("support")} />
+              <NavButton icon="fa-user" label="حسابي" active={activeTab === "profile"} onClick={() => setActiveTab("profile")} />
+            </nav>
+          )}
+
+        </div>
+      );
+    }
+
+    // Navigation Button Component
+    function NavButton({ icon, label, active, onClick, highlight }) {
+      return (
+        <button 
+          onClick={onClick}
+          className={`flex flex-col items-center justify-center transition-all relative py-1 px-2 ${
+            active ? "text-rose-500 font-bold scale-110" : "text-gray-400 hover:text-gray-200"
+          }`}
+        >
+          {highlight && !active && (
+            <span className="absolute top-0 right-2 w-2 h-2 bg-rose-500 rounded-full animate-ping"></span>
+          )}
+          <i className={`fa-solid ${icon} text-lg mb-0.5`}></i>
+          <span className="text-[10px]">{label}</span>
+        </button>
+      );
+    }
+
+    // ==========================================
+    // 1. LOGIN SCREEN
+    // ==========================================
+    function LoginScreen({ onLogin, toastMsg, showToast }) {
+      const [phoneInput, setPhoneInput] = useState("");
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        onLogin(phoneInput);
+      };
+
+      return (
+        <div className="min-h-screen bg-[#0b0f19] flex flex-col justify-between max-w-md mx-auto p-6 relative">
+          
+          <div className="mt-8 text-center">
+            <div className="w-24 h-24 mx-auto rounded-3xl bg-gradient-to-tr from-rose-600 via-rose-500 to-amber-500 p-0.5 red-glow mb-4 flex items-center justify-center">
+              <div className="w-full h-full bg-slate-900 rounded-[22px] flex items-center justify-center">
+                <i className="fa-solid fa-chart-line text-4xl text-rose-500"></i>
+              </div>
+            </div>
+            <h1 className="text-2xl font-extrabold text-white">منصة المهام الرقمية</h1>
+            <p className="text-xs text-gray-400 mt-1">منصة الترويج والتقاط الطلبات اليومية الأسرع نمواً</p>
+          </div>
+
+          <div className="card-gradient border border-slate-800 rounded-2xl p-6 shadow-xl my-auto">
+            <h2 className="text-lg font-bold text-white mb-1 text-center">تسجيل الدخول السريع</h2>
+            <p className="text-xs text-gray-400 text-center mb-6">أدخل رقم هاتفك لتسجيل الدخول أو إنشاء حساب جديد تلقائياً</p>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-2">رقم الهاتف المحمول</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 right-0 flex items-center pr-3.5 text-gray-400">
+                    <i className="fa-solid fa-mobile-screen"></i>
+                  </span>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="أدخل رقم الهاتف (مثال: 010xxxxxxxx)"
+                    value={phoneInput}
+                    onChange={(e) => setPhoneInput(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl pr-10 pl-4 py-3.5 text-sm text-white focus:outline-none focus:border-rose-500 transition dir-ltr text-right"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white font-bold py-3.5 rounded-xl shadow-lg transition transform active:scale-95 flex items-center justify-center gap-2"
+              >
+                <span>دخول / تسجيل</span>
+                <i className="fa-solid fa-arrow-left"></i>
+              </button>
+            </form>
+
+            <div className="mt-6 pt-4 border-t border-slate-800 text-center text-[11px] text-gray-500">
+              <p><i className="fa-solid fa-shield-halved ml-1"></i> تشفير كامل لكافة البيانات والأرصدة بواسطة السحابة</p>
+            </div>
+          </div>
+
+          <div className="text-center text-xs text-gray-500 my-4">
+            تطبيق تعليمي ومحاكي برمدي لمهام التسويق الرقمي © 2026
+          </div>
+
+          {toastMsg && (
+            <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-rose-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-xl border border-rose-400">
+              {toastMsg}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 2. USER HOME SCREEN
+    // ==========================================
+    function HomeScreen({ userData, setActiveTab }) {
+      return (
+        <div className="space-y-4">
+          
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-rose-950/40 p-5 border border-slate-700 shadow-xl">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs text-gray-400 font-semibold mb-1">رصيد الحساب المتاح</p>
+                <h2 className="text-3xl font-black text-amber-400 dir-ltr text-right">
+                  {userData?.balance?.toFixed(2) ?? "0.00"} <span className="text-sm font-normal text-gray-300">ج.م</span>
+                </h2>
+              </div>
+              <div className="vip-badge px-3 py-1 rounded-full text-xs font-black shadow-md flex items-center gap-1">
+                <i className="fa-solid fa-crown text-amber-900"></i> VIP {userData?.vipLevel ?? 0}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mt-5 pt-4 border-t border-slate-700/60">
+              <div className="bg-slate-900/60 rounded-xl p-2.5 border border-slate-800">
+                <p className="text-[10px] text-gray-400">إجمالي الأرباح</p>
+                <p className="text-sm font-bold text-emerald-400">{userData?.totalEarned?.toFixed(2) ?? "0.00"} ج.م</p>
+              </div>
+              <div className="bg-slate-900/60 rounded-xl p-2.5 border border-slate-800">
+                <p className="text-[10px] text-gray-400">المهام المتبقية اليوم</p>
+                <p className="text-sm font-bold text-rose-400">{userData?.tasksLeft ?? 0} مهام</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <button 
+                onClick={() => setActiveTab("deposit")}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-md"
+              >
+                <i className="fa-solid fa-plus-circle"></i> شحن/إيداع
+              </button>
+              <button 
+                onClick={() => setActiveTab("withdraw")}
+                className="bg-rose-600 hover:bg-rose-500 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition shadow-md"
+              >
+                <i className="fa-solid fa-arrow-up-right-from-square"></i> سحب أرباح
+              </button>
+            </div>
+          </div>
+
+          {userData?.vipLevel === 0 && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl shrink-0">
+                <i className="fa-solid fa-gift"></i>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-xs font-bold text-amber-300">هدية مستخدم جديد (VIP 0)</h3>
+                <p className="text-[11px] text-gray-300 mt-0.5">لديك 5 مهام هدية للربح المباشر (تصل حتى 75 ج.م)!</p>
+              </div>
+              <button 
+                onClick={() => setActiveTab("tasks")}
+                className="bg-amber-500 text-slate-950 font-black text-xs px-3 py-1.5 rounded-lg shrink-0 hover:bg-amber-400 transition"
+              >
+                بدء
+              </button>
+            </div>
+          )}
+
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+            <div className="flex justify-between items-center text-xs mb-2">
+              <span className="font-bold text-gray-300">مستوى العضوية VIP</span>
+              <span className="text-rose-400 font-bold">VIP {userData?.vipLevel ?? 0}</span>
+            </div>
+            <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden">
+              <div 
+                className="bg-gradient-to-r from-amber-500 to-rose-500 h-full transition-all duration-500" 
+                style={{ width: `${Math.min(((userData?.vipLevel || 0) / 5) * 100, 100)}%` }}
+              ></div>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-2">
+              {userData?.vipLevel === 0 
+                ? "قم بإيداع 100 ج.م للترقية إلى VIP 1 وإلغاء قفل السحب والمهام اليومية المتقدمة!" 
+                : `أنت الآن في مستوى VIP ${userData?.vipLevel}! يمكنك الترقية للحصول على أرباح ومهام أعلى.`}
+            </p>
+          </div>
+
+          <div>
+            <h3 className="text-sm font-bold text-gray-200 mb-3 flex items-center gap-2">
+              <i className="fa-solid fa-fire text-rose-500"></i> منتجات التقاط المهام الشائعة
+            </h3>
+
+            <div className="grid grid-cols-2 gap-3">
+              <TaskProductCard title="سماعة بلوتوث رياضية" price="250 ج.م" comm="15 ج.م" img="https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=200&q=80" />
+              <TaskProductCard title="ساعة ذكية مقاومة للماء" price="490 ج.م" comm="35 ج.م" img="https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=200&q=80" />
+              <TaskProductCard title="حقيبة سفر كلاسيكية" price="890 ج.م" comm="60 ج.م" img="https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=200&q=80" />
+              <TaskProductCard title="نظارة شمسية عصرية" price="180 ج.م" comm="12 ج.م" img="https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=200&q=80" />
+            </div>
+          </div>
+
+        </div>
+      );
+    }
+
+    function TaskProductCard({ title, price, comm, img }) {
+      return (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow">
+          <img src={img} alt={title} className="w-full h-24 object-cover" />
+          <div className="p-2.5">
+            <h4 className="text-xs font-bold text-gray-200 truncate">{title}</h4>
+            <div className="flex justify-between items-center mt-1 text-[10px]">
+              <span className="text-gray-400">{price}</span>
+              <span className="text-emerald-400 font-bold">ربح +{comm}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 3. TASKS SCREEN (LOGIC & REWARDS)
+    // ==========================================
+    function TasksScreen({ userData, userPhone, showToast, setActiveTab }) {
+      const [isGrabbing, setIsGrabbing] = useState(false);
+      const [rewardModal, setRewardModal] = useState(null);
+      const [depositNeededModal, setDepositNeededModal] = useState(null);
+
+      // Perform Task Engine
+      const handleGrabTask = async () => {
+        if (!userData || userData.tasksLeft <= 0) {
+          showToast("لقد استنفذت جميع المهام المتاحة لهذا اليوم!");
+          return;
+        }
+
+        setIsGrabbing(true);
+
+        setTimeout(async () => {
+          let rewardAmount = 0;
+
+          if (userData.vipLevel === 0) {
+            // Random reward for VIP 0 (Gift mode) - Range 10 to 15 EGP per task
+            rewardAmount = Math.floor(Math.random() * 6) + 10;
+          } else {
+            // VIP 1 to VIP 5 Rewards Logic
+            const minW = userData.customVipMinWin ?? (10 * (userData.vipLevel || 1));
+            const maxW = userData.customVipMaxWin ?? (40 * (userData.vipLevel || 1));
+            rewardAmount = Math.floor(Math.random() * (maxW - minW + 1)) + minW;
+          }
+
+          // CHECK RULE: Balance check is ONLY applied for VIP 1 and above!
+          // VIP 0 is exempted so new users can enjoy the full welcome gift package smoothly.
+          const currentBalance = userData.balance || 0;
+          if (userData.vipLevel > 0 && rewardAmount > currentBalance) {
+            const diffNeeded = rewardAmount - currentBalance;
+            setIsGrabbing(false);
+            setDepositNeededModal({
+              requiredComm: rewardAmount,
+              currentBalance: currentBalance,
+              diff: diffNeeded
+            });
+            return;
+          }
+
+          try {
+            const userDocRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', userPhone);
+            const updatedData = {
+              balance: (userData.balance || 0) + rewardAmount,
+              totalEarned: (userData.totalEarned || 0) + rewardAmount,
+              tasksLeft: userData.tasksLeft - 1,
+              tasksCompleted: (userData.tasksCompleted || 0) + 1,
+            };
+
+            await window.updateDoc(userDocRef, updatedData);
+            setRewardModal(rewardAmount);
+          } catch (e) {
+            console.error(e);
+            showToast("حدث خطأ أثناء حفظ أرباح المهمة");
+          } finally {
+            setIsGrabbing(false);
+          }
+        }, 2000);
+      };
+
+      return (
+        <div className="space-y-4 text-center">
+          
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+            <span className="text-xs font-bold text-rose-500 uppercase tracking-widest">غرفة التقاط الطلبات</span>
+            <h2 className="text-xl font-extrabold text-white mt-1">التقاط المهام اليومية</h2>
+            <p className="text-xs text-gray-400 mt-1">قم بالنقر على الزر لتأكيد الطلب وتحصيل عمولتك فوراً في رصيدك</p>
+
+            <div className="my-8 flex justify-center">
+              <button
+                disabled={isGrabbing || userData?.tasksLeft <= 0}
+                onClick={handleGrabTask}
+                className={`w-44 h-44 rounded-full bg-gradient-to-tr from-rose-600 via-amber-500 to-rose-500 p-1 flex items-center justify-center transition-all transform active:scale-95 shadow-2xl ${
+                  isGrabbing ? "animate-pulse" : "hover:scale-105"
+                } ${userData?.tasksLeft <= 0 ? "opacity-50 cursor-not-allowed" : ""}`}
+              >
+                <div className="w-full h-full bg-slate-950 rounded-full flex flex-col items-center justify-center p-4 border-2 border-amber-400/30">
+                  {isGrabbing ? (
+                    <>
+                      <i className="fa-solid fa-spinner text-3xl text-amber-400 animate-spin mb-2"></i>
+                      <span className="text-xs font-bold text-amber-300">جاري البحث عن طلب...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-hand-pointer text-3xl text-amber-400 mb-1 animate-bounce"></i>
+                      <span className="text-base font-black text-white">التقط الطلب الآن</span>
+                      <span className="text-[10px] text-gray-400 mt-1">
+                        {userData?.tasksLeft > 0 ? `${userData.tasksLeft} مهام متبقية` : "اكتملت المهام"}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-right">
+              <div className="bg-slate-950 rounded-xl p-3 border border-slate-800">
+                <p className="text-[10px] text-gray-400">المهام المكتملة</p>
+                <p className="text-sm font-bold text-white">{userData?.tasksCompleted ?? 0}</p>
+              </div>
+              <div className="bg-slate-950 rounded-xl p-3 border border-slate-800">
+                <p className="text-[10px] text-gray-400">مستوى العضوية الحالي</p>
+                <p className="text-sm font-bold text-amber-400">VIP {userData?.vipLevel ?? 0}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Reward Modal */}
+          {rewardModal && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-amber-500/50 rounded-3xl p-6 text-center max-w-xs w-full shadow-2xl relative">
+                <div className="w-16 h-16 rounded-full bg-amber-500/20 text-amber-400 text-3xl flex items-center justify-center mx-auto mb-3">
+                  <i className="fa-solid fa-coins"></i>
+                </div>
+                <h3 className="text-lg font-bold text-white">تم التقاط المهمة بنجاح!</h3>
+                <p className="text-xs text-gray-300 mt-1">حصلت على عمولة ترويج بقيمة:</p>
+                <p className="text-3xl font-black text-amber-400 my-3">+{rewardModal} ج.م</p>
+                <button
+                  onClick={() => setRewardModal(null)}
+                  className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-2.5 rounded-xl text-xs transition"
+                >
+                  استلام ومتابعة
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Modal when Commission > Balance (Requires Deposit) */}
+          {depositNeededModal && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-rose-500/60 rounded-3xl p-6 text-center max-w-xs w-full shadow-2xl relative">
+                <div className="w-16 h-16 rounded-full bg-rose-500/20 text-rose-500 text-3xl flex items-center justify-center mx-auto mb-3">
+                  <i className="fa-solid fa-triangle-exclamation"></i>
+                </div>
+                <h3 className="text-base font-bold text-white">رصيد الحساب غير كافٍ!</h3>
+                <p className="text-xs text-gray-300 mt-2 leading-relaxed">
+                  عمولة المهمة المطلوبة (<strong className="text-amber-400">{depositNeededModal.requiredComm} ج.م</strong>) أكبر من رصيدك المتاح (<strong className="text-rose-400">{depositNeededModal.currentBalance.toFixed(2)} ج.م</strong>).
+                </p>
+                <p className="text-xs text-emerald-400 font-bold mt-2">
+                  يجب إيداع الفرق المطلوب ({depositNeededModal.diff.toFixed(2)} ج.م) لإتاحة استكمال هذه المهمة والمهام التالية!
+                </p>
+                <div className="mt-5 space-y-2">
+                  <button
+                    onClick={() => {
+                      setDepositNeededModal(null);
+                      if (setActiveTab) setActiveTab("deposit");
+                    }}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs transition"
+                  >
+                    شحن الرصيد الآن ({depositNeededModal.diff.toFixed(2)} ج.م)
+                  </button>
+                  <button
+                    onClick={() => setDepositNeededModal(null)}
+                    className="w-full bg-slate-800 text-gray-400 font-semibold py-2 rounded-xl text-xs"
+                  >
+                    إغلاق
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 4. DEPOSIT SCREEN
+    // ==========================================
+    function DepositScreen({ userPhone, showToast }) {
+      const [amount, setAmount] = useState("");
+      const [activeNumIndex, setActiveNumIndex] = useState(0);
+      const [isSubmitting, setIsSubmitting] = useState(false);
+      const [receiptUploaded, setReceiptUploaded] = useState(false);
+
+      const targetNumber = DEPOSIT_NUMBERS[activeNumIndex];
+
+      const handleCopyNumber = () => {
+        const input = document.createElement("input");
+        input.value = targetNumber;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        document.body.removeChild(input);
+        showToast(`تم نسخ رقم المحفظة (${targetNumber})`);
+      };
+
+      const handleDepositSubmit = async (e) => {
+        e.preventDefault();
+        const depositVal = parseFloat(amount);
+        if (!depositVal || depositVal <= 0) {
+          showToast("يرجى إدخال مبلغ إيداع صحيح");
+          return;
+        }
+
+        setIsSubmitting(true);
+        try {
+          const reqRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'depositRequests');
+          await window.addDoc(reqRef, {
+            userPhone,
+            amount: depositVal,
+            targetNumber,
+            status: "pending",
+            createdAt: new Date().toISOString()
+          });
+
+          // Switch target deposit number for next attempt
+          setActiveNumIndex((prev) => (prev === 0 ? 1 : 0));
+          showToast("تم إرسال طلب الإيداع بنجاح، وهو قيد المراجعة الان");
+          setAmount("");
+          setReceiptUploaded(false);
+        } catch (err) {
+          console.error(err);
+          showToast("حدث خطأ أثناء رفع الإيداع");
+        } finally {
+          setIsSubmitting(false);
+        }
+      };
+
+      return (
+        <div className="space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+            <h2 className="text-lg font-bold text-white mb-1">شحن رصيد الحساب</h2>
+            <p className="text-xs text-gray-400 mb-4">قم بإنشاء طلب إيداع عن طريق تحويل المبلغ للمحفظة الإلكترونية الموضحة</p>
+
+            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-5">
+              <p className="text-[11px] text-gray-400 mb-1">محفظة التحويل النشطة حالياً</p>
+              <div className="flex justify-between items-center bg-slate-900 p-3 rounded-lg border border-slate-700">
+                <span className="font-extrabold text-amber-400 dir-ltr text-sm">{targetNumber}</span>
+                <button
+                  onClick={handleCopyNumber}
+                  className="bg-slate-800 hover:bg-slate-700 text-gray-200 text-xs px-3 py-1.5 rounded-md font-bold transition flex items-center gap-1"
+                >
+                  <i className="fa-solid fa-copy"></i> نسخ
+                </button>
+              </div>
+              <p className="text-[10px] text-gray-500 mt-2">ملاحظة: يتم تبديل أرقام محافظ التحويل تلقائياً لراحة المستخدمين.</p>
+            </div>
+
+            <form onSubmit={handleDepositSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-300 mb-1.5">مبلغ الإيداع (بالجنيه)</label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  placeholder="أدخل مبلغ الإيداع (مثال: 100)"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-300 mb-1.5">إرفاق إيصال التحويل (وهمي)</label>
+                <div className="border-2 border-dashed border-slate-800 hover:border-slate-700 rounded-xl p-4 text-center cursor-pointer transition" onClick={() => setReceiptUploaded(true)}>
+                  {receiptUploaded ? (
+                    <div className="text-emerald-400 font-bold text-xs flex items-center justify-center gap-1">
+                      <i className="fa-solid fa-check-circle"></i> تم اختيار الإيصال بنجاح
+                    </div>
+                  ) : (
+                    <div className="text-gray-400 text-xs flex flex-col items-center">
+                      <i className="fa-solid fa-cloud-arrow-up text-2xl text-rose-500 mb-1"></i>
+                      <span>اضغط لإرفاق صورة الإيصال</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl text-xs transition shadow-lg"
+              >
+                {isSubmitting ? "جاري إرسال الطلب..." : "تأكيد وإرسال طلب الشحن"}
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 5. WITHDRAW SCREEN
+    // ==========================================
+    function WithdrawScreen({ userData, userPhone, showToast, setActiveTab }) {
+      const [amount, setAmount] = useState("");
+      const [walletNumber, setWalletNumber] = useState("");
+      const [isSubmitting, setIsSubmitting] = useState(false);
+
+      const handleWithdrawSubmit = async (e) => {
+        e.preventDefault();
+
+        // CHECK VIP 0 CANNOT WITHDRAW RULE
+        if (!userData || userData.vipLevel === 0) {
+          showToast("عفواً! لا يمكن السحب في مستوى VIP 0. يجب الترقية لـ VIP 1 على الأقل بايداع 100 ج.م.");
+          return;
+        }
+
+        const withdrawVal = parseFloat(amount);
+        if (!withdrawVal || withdrawVal <= 0) {
+          showToast("يرجى إدخال مبلغ سحب صحيح");
+          return;
+        }
+
+        if (withdrawVal > (userData.balance || 0)) {
+          showToast("رصيدك الحالي غير كافٍ لإتمام عملية السحب");
+          return;
+        }
+
+        if (!walletNumber || walletNumber.length < 10) {
+          showToast("يرجى إدخال رقم محفظة استلام صحيح");
+          return;
+        }
+
+        setIsSubmitting(true);
+        try {
+          // Deduct balance temporarily & add request
+          const userDocRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', userPhone);
+          await window.updateDoc(userDocRef, {
+            balance: userData.balance - withdrawVal
+          });
+
+          const reqRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'withdrawRequests');
+          await window.addDoc(reqRef, {
+            userPhone,
+            amount: withdrawVal,
+            walletNumber,
+            status: "pending",
+            createdAt: new Date().toISOString()
+          });
+
+          showToast("تم خصم المبلغ مؤقتاً وإرسال طلب السحب قيد المراجعة");
+          setAmount("");
+          setWalletNumber("");
+        } catch (err) {
+          console.error(err);
+          showToast("حدث خطأ أثناء معالجة السحب");
+        } finally {
+          setIsSubmitting(false);
+        }
+      };
+
+      return (
+        <div className="space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+            <h2 className="text-lg font-bold text-white mb-1">سحب الأرباح</h2>
+            <p className="text-xs text-gray-400 mb-4">قم بإدخال تفاصيل السحب لتحويل الأرباح لحسابك المحفظة</p>
+
+            {userData?.vipLevel === 0 && (
+              <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-3 mb-4 text-xs text-rose-300 flex items-center justify-between">
+                <span>تنبيه: السحب مغلق لمستوى VIP 0</span>
+                <button onClick={() => setActiveTab("deposit")} className="bg-rose-600 text-white font-bold px-2.5 py-1 rounded-md text-[10px]">ترقية الان</button>
+              </div>
+            )}
+
+            <form onSubmit={handleWithdrawSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-300 mb-1.5">المبلغ المراد سحبه</label>
+                <input
+                  type="number"
+                  required
+                  min="1"
+                  placeholder="أدخل مبلغ السحب"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-rose-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-300 mb-1.5">رقم المحفظة المستقبلة (فودافون/كاش...)</label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="010xxxxxxxx"
+                  value={walletNumber}
+                  onChange={(e) => setWalletNumber(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-rose-500 dir-ltr text-right"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-rose-600 hover:bg-rose-500 text-white font-bold py-3.5 rounded-xl text-xs transition shadow-lg"
+              >
+                {isSubmitting ? "جاري معالجة الطلب..." : "تأكيد طلب السحب"}
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 6. PROFILE SCREEN
+    // ==========================================
+    function ProfileScreen({ userData, userPhone, onLogout, setActiveTab }) {
+      return (
+        <div className="space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-center">
+            <div className="w-20 h-20 bg-slate-800 border-2 border-amber-500 rounded-full flex items-center justify-center mx-auto text-2xl text-amber-400 mb-3 shadow-lg">
+              <i className="fa-solid fa-user"></i>
+            </div>
+            <h2 className="text-base font-extrabold text-white dir-ltr">{userPhone}</h2>
+            <div className="inline-block vip-badge px-3 py-0.5 rounded-full text-xs font-black mt-1">
+              عضوية VIP {userData?.vipLevel ?? 0}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mt-6 pt-4 border-t border-slate-800 text-right">
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                <p className="text-[10px] text-gray-400">الرصيد المتاح</p>
+                <p className="text-sm font-bold text-amber-400">{userData?.balance?.toFixed(2) || "0.00"} ج.م</p>
+              </div>
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                <p className="text-[10px] text-gray-400">إجمالي الأرباح</p>
+                <p className="text-sm font-bold text-emerald-400">{userData?.totalEarned?.toFixed(2) || "0.00"} ج.م</p>
+              </div>
+            </div>
+
+            <button
+              onClick={onLogout}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-rose-400 font-bold py-3 rounded-xl text-xs mt-5 transition border border-slate-700 flex items-center justify-center gap-2"
+            >
+              <i className="fa-solid fa-right-from-bracket"></i> تسجيل الخروج من الحساب
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 7. SUPPORT SCREEN
+    // ==========================================
+    function SupportScreen() {
+      return (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-center space-y-4">
+          <div className="w-16 h-16 bg-rose-500/20 text-rose-500 rounded-full flex items-center justify-center mx-auto text-3xl">
+            <i className="fa-solid fa-headset"></i>
+          </div>
+          <h2 className="text-lg font-bold text-white">خدمة العملاء والدعم الفني</h2>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            إذا واجهتك أي مشكلة في عمليات الشحن والإيداع أو السحب، يرجى التواصل فوراً مع فريق الدعم الفني
+          </p>
+
+          <div className="pt-4 border-t border-slate-800 space-y-2">
+            <a
+              href="#"
+              onClick={(e) => { e.preventDefault(); alert("جاري التوجيه لمحادثة الدعم الفني المباشر"); }}
+              className="block w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl text-xs transition"
+            >
+              <i className="fa-brands fa-whatsapp text-lg ml-1"></i> تواصل عبر الواتساب
+            </a>
+            <a
+              href="#"
+              onClick={(e) => { e.preventDefault(); alert("جاري التوجيه لقناة التليجرام"); }}
+              className="block w-full bg-sky-600 hover:bg-sky-500 text-white font-bold py-3 rounded-xl text-xs transition"
+            >
+              <i className="fa-brands fa-telegram text-lg ml-1"></i> قناة التليجرام الرسمية
+            </a>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 8. ADMIN / DEVELOPER CONTROL PANEL
+    // ==========================================
+    function AdminPanel({ showToast, onLogout }) {
+      const [usersList, setUsersList] = useState([]);
+      const [depositRequests, setDepositRequests] = useState([]);
+      const [withdrawRequests, setWithdrawRequests] = useState([]);
+      const [selectedUser, setSelectedUser] = useState(null);
+
+      // User Edit Inputs
+      const [editBalance, setEditBalance] = useState(0);
+      const [editVip, setEditVip] = useState(0);
+      const [editTasksLeft, setEditTasksLeft] = useState(5);
+      const [editMinWin, setEditMinWin] = useState(10);
+      const [editMaxWin, setEditMaxWin] = useState(40);
+
+      // Fetch Users & Requests from Firestore
+      useEffect(() => {
+        const usersCol = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
+        const unSubUsers = window.onSnapshot(usersCol, (snapshot) => {
+          const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setUsersList(list);
+        });
+
+        const depCol = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'depositRequests');
+        const unSubDep = window.onSnapshot(depCol, (snapshot) => {
+          const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setDepositRequests(list);
+        });
+
+        const withCol = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'withdrawRequests');
+        const unSubWith = window.onSnapshot(withCol, (snapshot) => {
+          const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setWithdrawRequests(list);
+        });
+
+        return () => {
+          unSubUsers();
+          unSubDep();
+          unSubWith();
+        };
+      }, []);
+
+      // Approve Deposit
+      const handleApproveDeposit = async (req) => {
+        try {
+          const reqRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'depositRequests', req.id);
+          await window.updateDoc(reqRef, { status: "approved" });
+
+          // Fetch user and add balance
+          const userRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', req.userPhone);
+          const userSnap = await window.getDoc(userRef);
+
+          if (userSnap.exists()) {
+            const currentBal = userSnap.data().balance || 0;
+            const currentVip = userSnap.data().vipLevel || 0;
+
+            // Automatic VIP Upgrade if deposit >= 100 and currently VIP 0
+            let newVip = currentVip;
+            let tasksToSet = userSnap.data().tasksLeft;
+            if (req.amount >= 100 && currentVip === 0) {
+              newVip = 1;
+              tasksToSet = 5; // Give 5 VIP 1 Tasks
+            }
+
+            await window.updateDoc(userRef, {
+              balance: currentBal + req.amount,
+              vipLevel: newVip,
+              tasksLeft: tasksToSet
+            });
+          }
+
+          showToast("تمت الموافقة على الإيداع وزيادة رصيد المستخدم بنجاح");
+        } catch (e) {
+          console.error(e);
+          showToast("حدث خطأ أثناء اعتماد الإيداع");
+        }
+      };
+
+      // Reject Deposit
+      const handleRejectDeposit = async (reqId) => {
+        try {
+          const reqRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'depositRequests', reqId);
+          await window.updateDoc(reqRef, { status: "rejected" });
+          showToast("تم رفض طلب الإيداع");
+        } catch (e) {
+          console.error(e);
+        }
+      };
+
+      // Approve Withdraw
+      const handleApproveWithdraw = async (req) => {
+        try {
+          const reqRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'withdrawRequests', req.id);
+          await window.updateDoc(reqRef, { status: "approved" });
+          showToast("تم إقرار عملية السحب بنجاح");
+        } catch (e) {
+          console.error(e);
+        }
+      };
+
+      // Reject Withdraw & Refund Balance
+      const handleRejectWithdraw = async (req) => {
+        try {
+          const reqRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'withdrawRequests', req.id);
+          await window.updateDoc(reqRef, { status: "rejected" });
+
+          // Refund User
+          const userRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', req.userPhone);
+          const userSnap = await window.getDoc(userRef);
+          if (userSnap.exists()) {
+            await window.updateDoc(userRef, {
+              balance: (userSnap.data().balance || 0) + req.amount
+            });
+          }
+
+          showToast("تم رفض السحب وإعادة المبلغ لرصيد المستخدم");
+        } catch (e) {
+          console.error(e);
+        }
+      };
+
+      // Save Custom User Edits
+      const handleSaveUserCustom = async (e) => {
+        e.preventDefault();
+        if (!selectedUser) return;
+
+        try {
+          const userRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', selectedUser.phone);
+          await window.updateDoc(userRef, {
+            balance: parseFloat(editBalance) || 0,
+            vipLevel: parseInt(editVip) || 0,
+            tasksLeft: parseInt(editTasksLeft) || 0,
+            customVipMinWin: parseFloat(editMinWin) || 10,
+            customVipMaxWin: parseFloat(editMaxWin) || 40,
+          });
+
+          showToast(`تم حفظ تعديلات الحساب (${selectedUser.phone}) بنجاح`);
+          setSelectedUser(null);
+        } catch (err) {
+          console.error(err);
+          showToast("حدث خطأ أثناء حفظ التعديلات");
+        }
+      };
+
+      return (
+        <div className="space-y-5">
+          <div className="bg-slate-900 border border-rose-500/40 rounded-2xl p-4 flex justify-between items-center">
+            <div>
+              <h2 className="text-base font-extrabold text-rose-400">لوحة تحكم المطور المشرف</h2>
+              <p className="text-[10px] text-gray-400">إدارة الأرصدة والمكافآت وطلبات السحب والإيداع</p>
+            </div>
+            <button onClick={onLogout} className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs px-3 py-1.5 rounded-lg">
+              خروج
+            </button>
+          </div>
+
+          {/* Pending Deposit Requests */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+            <h3 className="text-xs font-bold text-gray-200 mb-3 flex items-center gap-2">
+              <i className="fa-solid fa-wallet text-emerald-400"></i> طلبات الإيداع المعلقة
+            </h3>
+
+            <div className="space-y-2 max-h-56 overflow-y-auto">
+              {depositRequests.filter(r => r.status === "pending").length === 0 ? (
+                <p className="text-xs text-gray-500 text-center py-3">لا توجد طلبات إيداع معلقة حالياً</p>
+              ) : (
+                depositRequests.filter(r => r.status === "pending").map((req) => (
+                  <div key={req.id} className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs flex justify-between items-center">
+                    <div>
+                      <p className="font-bold text-white dir-ltr text-right">{req.userPhone}</p>
+                      <p className="text-emerald-400 font-extrabold mt-0.5">{req.amount} ج.م</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => handleApproveDeposit(req)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1 rounded-lg">قبول</button>
+                      <button onClick={() => handleRejectDeposit(req.id)} className="bg-rose-600 hover:bg-rose-500 text-white font-bold px-3 py-1 rounded-lg">رفض</button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Pending Withdraw Requests */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+            <h3 className="text-xs font-bold text-gray-200 mb-3 flex items-center gap-2">
+              <i className="fa-solid fa-hand-holding-dollar text-rose-400"></i> طلبات السحب المعلقة
+            </h3>
+
+            <div className="space-y-2 max-h-56 overflow-y-auto">
+              {withdrawRequests.filter(r => r.status === "pending").length === 0 ? (
+                <p className="text-xs text-gray-500 text-center py-3">لا توجد طلبات سحب معلقة حالياً</p>
+              ) : (
+                withdrawRequests.filter(r => r.status === "pending").map((req) => (
+                  <div key={req.id} className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs flex justify-between items-center">
+                    <div>
+                      <p className="font-bold text-white dir-ltr text-right">{req.userPhone}</p>
+                      <p className="text-rose-400 font-extrabold mt-0.5">{req.amount} ج.م &larr; {req.walletNumber}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => handleApproveWithdraw(req)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1 rounded-lg">موافقة</button>
+                      <button onClick={() => handleRejectWithdraw(req)} className="bg-rose-600 hover:bg-rose-500 text-white font-bold px-3 py-1 rounded-lg">إلغاء</button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* User Management List & Custom Rewards Control */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+            <h3 className="text-xs font-bold text-gray-200 mb-3">قائمة حسابات المستخدمين والتعديل المباشر</h3>
+
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {usersList.map((usr) => (
+                <div key={usr.id} className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs flex justify-between items-center">
+                  <div>
+                    <span className="font-bold text-white dir-ltr">{usr.phone}</span>
+                    <div className="flex gap-2 text-[10px] text-gray-400 mt-1">
+                      <span>الرصيد: <strong className="text-amber-400">{usr.balance?.toFixed(1) || 0} ج.م</strong></span>
+                      <span>VIP: <strong className="text-rose-400">{usr.vipLevel || 0}</strong></span>
+                      <span>مهام: <strong className="text-emerald-400">{usr.tasksLeft ?? 0}</strong></span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setSelectedUser(usr);
+                      setEditBalance(usr.balance || 0);
+                      setEditVip(usr.vipLevel || 0);
+                      setEditTasksLeft(usr.tasksLeft ?? 5);
+                      setEditMinWin(usr.customVipMinWin || 10);
+                      setEditMaxWin(usr.customVipMaxWin || 40);
+                    }}
+                    className="bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-lg font-bold"
+                  >
+                    تعديل
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Edit User Custom Modal */}
+          {selectedUser && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-700 rounded-3xl p-5 max-w-sm w-full text-right">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-sm font-bold text-white">تعديل بيانات المستخدم</h3>
+                  <button onClick={() => setSelectedUser(null)} className="text-gray-400 text-lg">×</button>
+                </div>
+
+                <form onSubmit={handleSaveUserCustom} className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-gray-400 mb-1">الرصيد المباشر</label>
+                    <input 
+                      type="number" 
+                      value={editBalance} 
+                      onChange={(e) => setEditBalance(e.target.value)} 
+                      className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white text-right"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-400 mb-1">عدد المهام المتاحة</label>
+                    <input 
+                      type="number" 
+                      value={editTasksLeft} 
+                      onChange={(e) => setEditTasksLeft(e.target.value)} 
+                      className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white text-right"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-400 mb-1">مستوى العضوية VIP</label>
+                    <select 
+                      value={editVip} 
+                      onChange={(e) => setEditVip(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white text-right font-bold text-amber-400"
+                    >
+                      <option value="0">VIP 0 (مستخدم جديد)</option>
+                      <option value="1">VIP 1 (مشترك مفعّل)</option>
+                      <option value="2">VIP 2 (عضوية متتقدمة)</option>
+                      <option value="3">VIP 3 (عضوية ممتازة)</option>
+                      <option value="4">VIP 4 (عضوية كبار الشخصيات)</option>
+                      <option value="5">VIP 5 (عضوية فاخرة)</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+                    <div>
+                      <label className="block text-gray-400 mb-1">أدنى ربح للمهمة الواحدة</label>
+                      <input 
+                        type="number" 
+                        value={editMinWin} 
+                        onChange={(e) => setEditMinWin(e.target.value)} 
+                        className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white text-right"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-400 mb-1">أقصى ربح للمهمة الواحدة</label>
+                      <input 
+                        type="number" 
+                        value={editMaxWin} 
+                        onChange={(e) => setEditMaxWin(e.target.value)} 
+                        className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-white text-right"
+                      />
+                    </div>
+                  </div>
+
+                  <button 
+                    type="submit"
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl mt-4"
+                  >
+                    حفظ التغييرات
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    // Render React Root
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
